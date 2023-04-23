@@ -1,0 +1,83 @@
+#!/usr/bin/python3
+
+# Library for node creation
+import rclpy
+from rclpy.node import Node
+import cv2
+import mediapipe as mp
+import time
+from geometry_msgs.msg import Vector3Stamped
+
+
+def finger_count_detection():
+    old_upCount=0
+    upCount=0
+    change_mode=False
+
+    finger_count_detector = rclpy.create_node('finger_count_detector')
+    finger_count_detector.get_logger().info("waiting for ROS services", once=True)
+    count_publisher = finger_count_detector.create_publisher(Vector3Stamped,"project/finger_count",1)
+    cap = cv2.VideoCapture(0)
+    mp_Hands = mp.solutions.hands
+    hands = mp_Hands.Hands()
+    mpDraw = mp.solutions.drawing_utils
+    finger_Coord = [(8, 6), (12, 10), (16, 14), (20, 18)]
+    thumb_Coord = (4,2)
+    msg=Vector3Stamped()
+    while True:
+        success, image = cap.read()
+        RGB_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = hands.process(RGB_image)
+        multiLandMarks = results.multi_hand_landmarks
+
+        if multiLandMarks:
+            handList = []
+            for handLms in multiLandMarks:
+                mpDraw.draw_landmarks(image, handLms, mp_Hands.HAND_CONNECTIONS)
+                for idx, lm in enumerate(handLms.landmark):
+                    h, w, c = image.shape
+                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    handList.append((cx, cy))
+                for point in handList:
+                    cv2.circle(image, point, 10, (255, 255, 0), cv2.FILLED)
+
+                    upCount = 0
+                    for coordinate in finger_Coord:
+                        if handList[coordinate[0]][1] < handList[coordinate[1]][1]:
+                            upCount += 1
+                        if handList[thumb_Coord[0]][0] > handList[thumb_Coord[1]][0]:
+                            upCount += 1
+                    cv2.putText(image, str(upCount), (150,150), cv2.FONT_HERSHEY_PLAIN, 12, (0,255,0), 12)
+
+        cv2.imshow("Counting number of fingers", image)
+        cv2.waitKey(1)
+        if old_upCount==upCount:
+            change_mode=True
+        else:
+            change_mode=False
+        msg.vector.x=float(upCount)         # publishing the count
+        msg.vector.y=float(change_mode)     # Now change flight mode   
+             
+        count_publisher.publish(msg)
+
+        old_upCount=upCount
+        print(msg)
+
+def main(args=None):
+    rclpy.init(args=None)
+    
+    print("finger count detection")
+    
+    
+    time.sleep(1)
+    finger_count_detection()
+    rclpy.spin(count_publisher)
+    count_publisher.destroy_node()
+    rclpy.shutdown()
+    cv2.destroyAllWindows()
+
+
+if __name__=='__main__':
+    main()
+    
+    
