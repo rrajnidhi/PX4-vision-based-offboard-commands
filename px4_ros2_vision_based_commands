@@ -1,0 +1,114 @@
+import rclpy
+from math import sqrt
+from rclpy.node import Node
+from px4_msgs.msg import OffboardControlMode,VehicleControlMode,VehicleCommand
+from geometry_msgs.msg import Vector3Stamped
+
+
+class Project_commander(Node):
+    def __init__(self):
+        super().__init__('Project_commander_node')
+        self.vehicle_control_mode_sub_ = self.create_subscription(VehicleControlMode, "/uav01/fmu/vehicle_control_mode/out",
+                                                                  self.vehicle_control_mode_callback, 10)
+        self.hand_count_sub=self.create_subscription(Vector3Stamped,"/project/finger_count",self.hand_countcallback,10)
+        self.offboard_control_mode_publisher_ = self.create_publisher(OffboardControlMode,
+                                                                      "/uav01/fmu/offboard_control_mode/in", 10)
+
+        self.vehicle_command_publisher = self.create_publisher(VehicleCommand, "/uav01/fmu/vehicle_command/in", 10)
+
+
+    #initialization
+        self.count=0
+        self.timestamp=0        
+        self.is_offboard_mode=False
+        self.ready_for_change=False
+        
+    
+    def hand_countcallback(self,msg):
+        self.count=msg.vector.x
+        self.ready_for_change=not msg.vector.y
+        self.change_aircraft_mode()
+
+
+    def vehicle_control_mode_callback(self,msg):
+        self.timestamp=msg.timestamp
+        self.is_offboard_mode = msg.flag_control_offboard_enabled
+
+    # Arm the vehicle
+    def arm(self):
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
+        self.get_logger().info("Arm command send")
+
+    # Disarm the vehicle
+    def disarm(self):
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0)
+        self.get_logger().info("Disarm command send")
+
+    #0=disarm,#1=Arm,2=mission,3=loiter, 4-off-board
+
+    def change_aircraft_mode(self):
+       
+        if(self.ready_for_change==True and self.count==0):
+            self.disarm()
+        
+        if(self.ready_for_change==True and self.count==1):
+            self.arm()
+
+        if(self.ready_for_change==True and self.count==2):
+            print("Change to Mission mode")
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 4., 4.)
+
+        if(self.ready_for_change==True and self.count==3):
+            print("Change to Loiter mode")
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 4., 3.)
+
+        # if(self.ready_for_change==True and self.count==4):
+        #     print("Change to Offboard mode")
+        #     self.publish_offboard_control_mode()
+        #     self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, 1., 6.)
+
+    def publish_offboard_control_mode(self):
+            msg = OffboardControlMode()
+            msg.timestamp = self.timestamp
+            msg.position = False
+            msg.velocity = False
+            msg.acceleration = False
+            msg.attitude = False
+            msg.body_rate = True
+            self.offboard_control_mode_publisher_.publish(msg)
+
+    '''
+    Publish vehicle commands
+        command   Command code (matches VehicleCommand and MAVLink MAV_CMD codes)
+        param1    Command parameter 1 as defined by MAVLink uint16 VEHICLE_CMD enum
+        param2    Command parameter 2 as defined by MAVLink uint16 VEHICLE_CMD enum
+    '''
+
+    def publish_vehicle_command(self, command, param1=0.0, param2=0.0):
+        msg = VehicleCommand()
+        msg.param1 = param1
+        msg.param2 = param2
+        msg.command = command  # command ID
+        msg.target_system = 1  # system which should execute the command
+        msg.target_component = 1  # component which should execute the command, 0 for all components
+        msg.source_system = 1  # system sending the command
+        msg.source_component = 1  # component sending the command
+        msg.from_external = True
+        msg.timestamp = self.timestamp # time in microseconds
+        print(self.timestamp)
+        self.vehicle_command_publisher.publish(msg)
+
+
+
+def main(args=None):
+
+        rclpy.init(args=args)
+        print("Starting Project commander...\n")
+        project_commander = Project_commander()   
+        rclpy.spin(project_commander)
+        project_commander.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+        main()
