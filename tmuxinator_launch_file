@@ -1,0 +1,38 @@
+name: single_gazebo
+root: ../../
+
+on_project_start:
+  - apt-get update
+  - pip install mediapipe
+  - pip install opencv-python
+
+
+  # - sudo apt install ros-humble-gazebo-ros-pkgs -y
+  # - apt install ros-$ROS_DISTRO-plotjuggler-ros -y
+  # - pip install simple-pid
+   
+
+pre_window:
+  - source ~/.bashrc 
+  - source /app/px4_ros2_workspace/install/setup.bash       
+  - source /app/lrs_workspace/install/setup.bash
+
+windows:
+  - simulation:
+      layout: tiled
+      panes:
+      # for red target
+        - sleep 2; cd /PX4-Autopilot; - export GAZEBO_MODEL=standard_vtol; export GAZEBO_SIM=gazebo_standard_vtol; export PX4_HOME_LAT=24.174877 ; export PX4_HOME_LON=53.877481 ; make px4_sitl_rtps gazebo_foxtech_fpv_cam__orange_plane; GAZEBO_MASTER_URI=http://127.0.0.1:11345 ./Tools/gazebo_sitl_multiple_run.sh -t px4_sitl_rtps -m $GAZEBO_MODEL -l rtps -n 1
+        - sleep 3;export PYTHONOPTIMIZE=1; ros2 run project finger_count_ros
+        - sleep 3;export PYTHONOPTIMIZE=1; ros2 run project project_commander
+
+  - rtps_agent:
+      layout: tiled
+      panes:
+        - sleep 10; micrortps_agent -t UDP -r 2020 -s 2019 -n uav01
+        
+  - plot_juggler:
+      layout: tiled
+      panes:
+        # - ros2 run plotjuggler plotjuggler                                          # Newly ADDED
+         
